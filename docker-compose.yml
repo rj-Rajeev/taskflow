@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - db_data:/var/lib/postgresql
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis
+    restart: always
+
+volumes:
+  db_data:
+    driver: local

@@ -1,0 +1,126 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../apps/api/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Organization {
+  id                 String @id @default(uuid()) @db.Uuid
+  name               String
+  created_at         DateTime @default(now())
+
+  members            OrgMember[]
+  projects           Project[]
+}
+
+model User {
+  id                 String @id @default(uuid()) @db.Uuid
+  name               String
+  email              String @unique
+  password_hash      String
+  created_at         DateTime  @default(now())
+  updated_at         DateTime @updatedAt
+
+  organizations      OrgMember[]
+  taskAssignments             TaskAssignment[]
+  comments          Comment[]
+}
+
+model OrgMember {
+  id                String @id @default(uuid()) @db.Uuid
+  org_id            String @db.Uuid
+  user_id           String @db.Uuid
+  role              Role
+
+  organization Organization @relation(fields: [org_id], references: [id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [id], onDelete: Restrict)
+  @@unique([org_id, user_id])
+}
+
+enum Role {
+  org_admin
+  member
+}
+
+
+model Project {
+  id                String @id @default(uuid()) @db.Uuid
+  name              String
+  description       String
+  org_id            String @db.Uuid
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  tasks             Task[]
+  organization Organization @relation(fields: [org_id], references: [id], onDelete: Restrict)
+
+  @@index([org_id])
+}
+
+model Task {
+  id                String @id @default(uuid()) @db.Uuid
+  title             String
+  description       String
+  project_id        String @db.Uuid
+  due_date          DateTime?
+  status            TaskStatus
+  priority          TaskPriority
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  taskAssignments   TaskAssignment[]
+  comments          Comment[]
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  @@index([project_id])
+  @@index([status])
+  @@index([priority])
+  @@index([due_date])
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  review
+  done 
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+model TaskAssignment {
+  id                String @id @default(uuid()) @db.Uuid
+  task_id           String @db.Uuid
+  user_id           String @db.Uuid
+  
+  @@unique([task_id, user_id])
+  task Task         @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [user_id], references:[id], onDelete: Restrict)
+
+  @@index([user_id])
+}
+
+model Comment {
+  id                String @id @default(uuid()) @db.Uuid
+  text              String
+  task_id           String @db.Uuid
+  author_id           String @db.Uuid
+  created_at        DateTime @default(now())
+
+  task Task @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  author User @relation(fields: [author_id], references: [id], onDelete: Cascade)
+
+  @@index([task_id])
+}
