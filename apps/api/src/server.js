@@ -3,11 +3,14 @@ import './config/env.js';
 import prisma from './lib/prisma.js';
 
 import healthRoutes from './routes/health.routes.js'
+import routes from './routes/index.js'
 
 
 const app = express();
+app.use(express.json());
 
 app.use('/health', healthRoutes);
+app.use('/', routes);
 app.get('/',(req, res)=>{
     res.json({success : true})
 })

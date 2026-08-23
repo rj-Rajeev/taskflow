@@ -29,6 +29,9 @@ model User {
   created_at         DateTime  @default(now())
   updated_at         DateTime @updatedAt
 
+  refresh_token      String?
+  refresh_expires_at DateTime?
+
   organizations      OrgMember[]
   taskAssignments             TaskAssignment[]
   comments          Comment[]
