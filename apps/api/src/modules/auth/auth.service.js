@@ -139,9 +139,21 @@ export async function renewSession(refreshToken) {
     throw error;
   }
 
+  const orgMember = await prisma.orgMember.findFirst({
+    where: {
+      user_id: dbUser.id,
+    },
+    select: {
+      org_id: true,
+      role: true,
+    },
+  });
+
   const accessToken = generateAccessToken({
     id: dbUser.id,
     name: dbUser.name,
+    orgId: orgMember?.org_id ?? null,
+    role: orgMember?.role ?? null,
   });
 
   return {

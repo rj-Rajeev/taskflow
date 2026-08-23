@@ -99,3 +99,50 @@ export async function deleteProjectService(projectId, orgId) {
     },
   });
 }
+
+export async function getProjectDashboardService(projectId, orgId) {
+  const project = await prisma.project.findUnique({
+    where: {
+      id: projectId,
+    },
+    select: {
+      id: true,
+      org_id: true,
+    },
+  });
+
+  if (!project) {
+    const error = new Error("Project not found");
+    error.code = "PROJECT_NOT_FOUND";
+    throw error;
+  }
+
+  if (project.org_id !== orgId) {
+    const error = new Error("Forbidden");
+    error.code = "PROJECT_FORBIDDEN";
+    throw error;
+  }
+
+  const groupedTasks = await prisma.task.groupBy({
+    by: ["status"],
+    where: {
+      project_id: projectId,
+    },
+    _count: {
+      _all: true,
+    },
+  });
+
+  const dashboard = {
+    todo: 0,
+    in_progress: 0,
+    review: 0,
+    done: 0,
+  };
+
+  for (const item of groupedTasks) {
+    dashboard[item.status] = item._count._all;
+  }
+
+  return dashboard;
+}

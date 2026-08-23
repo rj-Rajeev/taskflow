@@ -5,9 +5,24 @@ import prisma from './lib/prisma.js';
 import healthRoutes from './routes/health.routes.js'
 import routes from './routes/index.js'
 
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./config/swagger.js";
+
 
 const app = express();
 app.use(express.json());
+
+// Swagger documentation
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec),
+);
+
+// Raw OpenAPI specification
+app.get("/api-docs.json", (req, res) => {
+  res.json(swaggerSpec);
+});
 
 app.use('/health', healthRoutes);
 app.use('/', routes);
@@ -25,13 +40,14 @@ async function connectDB() {
 
   } catch (error) {
     console.error("Database connection failed:", error);
-    process.exit(1);
+    throw error
   }
 }
 
-await connectDB();
+if (process.env.NODE_ENV !== "test") {
+  await connectDB();
 
-app.listen(PORT || 3001, ()=>{
-    console.log("App is running on ", PORT);
-    
-})
+  app.listen(PORT, () => {
+    console.log("App is running on", PORT);
+  });
+}
