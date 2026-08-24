@@ -10,17 +10,16 @@ TaskFlow is a multi-tenant project management backend built with Node.js and Exp
 
 ```bash
 git clone https://github.com/rj-Rajeev/taskflow.git
-
 cd taskflow
-````
+```
 
 ### 2. Create `.env.docker`
 
 Create a `.env.docker` file in the project root.
 
-Add the required environment variables used by the Docker environment.
+This file is used by the Docker-based application services.
 
-```
+```env
 PORT=3000
 
 # POSTGRES
@@ -37,33 +36,84 @@ JWT_SECRET=your_jwt_secret
 
 # DATABASE
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/taskflow?schema=public
-
 ```
 
-### 3. Start the Project
+> **Important:** When the application runs inside Docker, use the Docker Compose service name `postgres` as the database host. Do not use `localhost` for the database connection from inside a container.
 
-Run:
+### 3. Start the Docker Services
+
+Start the complete application stack:
 
 ```bash
 docker compose up --build
 ```
 
-Docker Compose starts the required application services:
+Docker Compose starts:
 
 * API
 * Worker
 * PostgreSQL
 * Redis
 
-### 4. Seed the Database
+Wait until PostgreSQL reports that it is ready to accept connections and the API/Worker services are running.
 
-After the database and application services are running, execute the Prisma seed script:
+### 4. Create the Local Environment for Prisma
+
+Prisma commands such as migrations, generation, seeding, and Prisma Studio are executed from the host machine.
+
+Create a `.env` file in the project root:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/taskflow?schema=public
+```
+
+> **Important:** The local `.env` uses `localhost` because Prisma is running on your host machine. The Docker application uses `postgres` because it runs inside the Docker network.
+
+The two environments therefore use:
+
+```text
+Docker application:
+postgresql://postgres:postgres@postgres:5432/taskflow
+
+Local Prisma commands:
+postgresql://postgres:postgres@localhost:5432/taskflow
+```
+
+### 5. Install Dependencies
+
+Install the Node.js dependencies:
+
+```bash
+npm i
+```
+
+### 6. Apply Database Migrations
+
+Run the Prisma migrations against the PostgreSQL database:
+
+```bash
+npx prisma migrate dev
+```
+
+This creates/updates the database schema according to the migrations committed to the repository.
+
+### 7. Generate Prisma Client
+
+Generate the Prisma Client:
+
+```bash
+npx prisma generate
+```
+
+### 8. Seed the Database
+
+Run the Prisma seed script:
 
 ```bash
 npx prisma db seed
 ```
 
-The seed script creates the required sample data for development and API testing.
+The seed script creates the sample data required for development and API testing.
 
 The seed data includes:
 
@@ -74,6 +124,96 @@ The seed data includes:
 * Different task statuses
 * Different task priorities
 * Task assignments
+
+### 9. Verify the Database with Prisma Studio
+
+After migrations, Prisma Client generation, and seeding are complete, optionally start Prisma Studio:
+
+```bash
+npx prisma studio
+```
+
+Prisma Studio should connect to the PostgreSQL container through:
+
+```text
+localhost:5432
+```
+
+and allow you to inspect the seeded database.
+
+---
+
+## Complete Setup Flow
+
+For a fresh development environment, the complete sequence is:
+
+```bash
+# Clone
+git clone https://github.com/rj-Rajeev/taskflow.git
+cd taskflow
+
+# Create .env.docker
+# Create .env with localhost DATABASE_URL
+
+# Install dependencies
+npm i
+
+# Start Docker services
+docker compose up --build
+```
+
+After the containers are running:
+
+```bash
+# Apply migrations
+npx prisma migrate dev
+
+# Generate Prisma Client
+npx prisma generate
+
+# Seed development data
+npx prisma db seed
+
+# Optional: inspect the database
+npx prisma studio
+```
+
+### Environment Overview
+
+```text
+                         Docker Compose
+                    ┌─────────────────────┐
+                    │                     │
+                    │       API           │
+                    │        │            │
+                    │        │            │
+                    │      Worker         │
+                    │                     │
+                    │        │            │
+                    │        ▼            │
+                    │   PostgreSQL        │
+                    │      :5432          │
+                    │                     │
+                    │     Redis           │
+                    │      :6379          │
+                    └─────────┬───────────┘
+                              │
+                         port 5432
+                              │
+                              ▼
+                         Host Machine
+                              │
+                              ├── Prisma Migrate
+                              ├── Prisma Generate
+                              ├── Prisma Seed
+                              └── Prisma Studio
+
+Docker DATABASE_URL:
+postgresql://postgres:postgres@postgres:5432/taskflow
+
+Local DATABASE_URL:
+postgresql://postgres:postgres@localhost:5432/taskflow
+```
 
 ---
 
@@ -101,17 +241,30 @@ http://localhost:3000/health
 
 ## Stop the Project
 
+Stop the Docker services:
+
 ```bash
 docker compose down
 ```
 
-To remove containers, networks, and associated volumes:
+To remove containers, networks, and associated database volumes:
 
 ```bash
 docker compose down -v
 ```
 
-Use the volume removal command only when a fresh database is required.
+> **Warning:** `docker compose down -v` removes the PostgreSQL volume and therefore deletes the development database. Use it only when a completely fresh database is required.
+
+For a clean installation test, you can use:
+
+```bash
+docker compose down -v --remove-orphans
+docker compose up --build
+npm i
+npx prisma migrate dev
+npx prisma generate
+npx prisma db seed
+```
 
 ---
 
@@ -187,8 +340,10 @@ The test suite covers:
 
 Supported roles:
 
-* `org_admin`
-* `member`
+```text
+org_admin
+member
+```
 
 Organization admins can:
 
@@ -200,7 +355,7 @@ Organization admins can:
 Members can:
 
 * View organization members
-* Create and manage projects/tasks according to the API permissions
+* Create and manage projects/tasks according to API permissions
 * Work with tasks within their organization
 
 ## Projects
@@ -629,6 +784,56 @@ The implementation addresses the major requirements from the TaskFlow backend as
 ---
 
 # Current Test Status
+
+```text
+69 tests
+69 passed
+0 failed
+```
+
+The project can be verified from a clean environment using the following flow:
+
+```bash
+git clone https://github.com/rj-Rajeev/taskflow.git
+cd taskflow
+
+# Create .env.docker with Docker service configuration
+# Create .env with localhost DATABASE_URL
+
+npm i
+
+docker compose up --build
+```
+
+After the Docker services are ready:
+
+```bash
+npx prisma migrate dev
+npx prisma generate
+npx prisma db seed
+npx prisma studio
+```
+
+Then verify the application:
+
+```text
+API:
+http://localhost:3000
+
+Swagger:
+http://localhost:3000/api-docs
+
+Health:
+http://localhost:3000/health
+```
+
+Finally, run the automated tests:
+
+```bash
+npm test
+```
+
+Expected result:
 
 ```text
 69 tests
