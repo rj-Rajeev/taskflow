@@ -26,6 +26,7 @@ model User {
   name               String
   email              String @unique
   password_hash      String
+  role               UserRole @default(DEVELOPER)
   created_at         DateTime  @default(now())
   updated_at         DateTime @updatedAt
 
@@ -35,6 +36,9 @@ model User {
   organizations      OrgMember[]
   taskAssignments             TaskAssignment[]
   comments          Comment[]
+  createdProjects   Project[] @relation("ProjectCreator")
+  activityLogs      ActivityLog[]
+  notifications     Notification[]
 }
 
 model OrgMember {
@@ -53,19 +57,41 @@ enum Role {
   member
 }
 
+enum UserRole {
+  ADMIN
+  PROJECT_MANAGER
+  DEVELOPER
+}
+
 
 model Project {
   id                String @id @default(uuid()) @db.Uuid
   name              String
   description       String
   org_id            String @db.Uuid
+  client_id         String? @db.Uuid
+  created_by        String? @db.Uuid
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
   tasks             Task[]
+  activityLogs      ActivityLog[]
   organization Organization @relation(fields: [org_id], references: [id], onDelete: Restrict)
+  client            Client? @relation(fields: [client_id], references: [id], onDelete: SetNull)
+  creator           User? @relation("ProjectCreator", fields: [created_by], references: [id], onDelete: SetNull)
 
   @@index([org_id])
+  @@index([client_id])
+  @@index([created_by])
+}
+
+model Client {
+  id                String @id @default(uuid()) @db.Uuid
+  name              String
+  email             String?
+  created_at        DateTime @default(now())
+
+  projects          Project[]
 }
 
 model Task {
@@ -76,17 +102,21 @@ model Task {
   due_date          DateTime?
   status            TaskStatus
   priority          TaskPriority
+  is_overdue        Boolean @default(false)
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
   taskAssignments   TaskAssignment[]
   comments          Comment[]
+  activityLogs      ActivityLog[]
+  notifications     Notification[]
 
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
   @@index([project_id])
   @@index([status])
   @@index([priority])
   @@index([due_date])
+  @@index([is_overdue, due_date])
 }
 
 enum TaskStatus {
@@ -100,6 +130,7 @@ enum TaskPriority {
   low
   medium
   high
+  critical
   urgent
 }
 
@@ -126,4 +157,50 @@ model Comment {
   author User @relation(fields: [author_id], references: [id], onDelete: Cascade)
 
   @@index([task_id])
+}
+
+model ActivityLog {
+  id                String @id @default(uuid()) @db.Uuid
+  project_id        String @db.Uuid
+  task_id           String? @db.Uuid
+  actor_id          String @db.Uuid
+  type              ActivityType
+  from_status       TaskStatus?
+  to_status         TaskStatus?
+  message           String
+  created_at        DateTime @default(now())
+
+  project           Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  task              Task? @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  actor             User @relation(fields: [actor_id], references: [id], onDelete: Restrict)
+
+  @@index([project_id, created_at])
+  @@index([task_id, created_at])
+  @@index([actor_id, created_at])
+}
+
+enum ActivityType {
+  TASK_STATUS_CHANGED
+  TASK_ASSIGNED
+  TASK_OVERDUE
+}
+
+model Notification {
+  id                String @id @default(uuid()) @db.Uuid
+  recipient_id      String @db.Uuid
+  task_id           String? @db.Uuid
+  type              NotificationType
+  message           String
+  read_at           DateTime?
+  created_at        DateTime @default(now())
+
+  recipient         User @relation(fields: [recipient_id], references: [id], onDelete: Cascade)
+  task              Task? @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@index([recipient_id, read_at, created_at])
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_MOVED_TO_REVIEW
 }

@@ -7,6 +7,8 @@ import {
   assignTaskService,
   unassignTaskService,
 } from "./task.service.js";
+import { publishActivity, publishNotification, publishNotificationCount } from "../../lib/realtime.js";
+import prisma from "../../lib/prisma.js";
 
 export async function getTasks(req, res) {
   try {
@@ -52,6 +54,8 @@ export async function getTasks(req, res) {
       dueTo: due_to,
       page: pageNumber,
       limit: limitNumber,
+      userId: req.userId,
+      userRole: req.userRole,
     });
 
     return res.status(200).json({
@@ -77,7 +81,7 @@ export async function getTask(req, res) {
       });
     }
 
-    const task = await getTaskService(req.params.id, req.orgId);
+    const task = await getTaskService(req.params.id, req.orgId, req.userId, req.userRole);
 
     return res.status(200).json({
       success: true,
@@ -135,6 +139,8 @@ export async function createTask(req, res) {
       status,
       priority,
       orgId: req.orgId,
+      userId: req.userId,
+      userRole: req.userRole,
     });
 
     return res.status(201).json({
@@ -197,11 +203,19 @@ export async function updateTask(req, res) {
       dueDate: due_date,
       status,
       priority,
+      userId: req.userId,
+      userRole: req.userRole,
     });
+
+    if (task.activity) publishActivity(task.task.project_id, task.activity);
+    if (task.notification) {
+      publishNotification(task.notification.recipient_id, task.notification);
+      publishNotificationCount(task.notification.recipient_id, await prisma.notification.count({ where: { recipient_id: task.notification.recipient_id, read_at: null } }));
+    }
 
     return res.status(200).json({
       success: true,
-      data: task,
+      data: task.task,
     });
   } catch (error) {
     if (error.code === "TASK_NOT_FOUND") {
@@ -229,6 +243,13 @@ export async function updateTask(req, res) {
       return res.status(400).json({
         success: false,
         message: "Invalid task priority",
+      });
+    }
+
+    if (error.code === "DEVELOPER_STATUS_ONLY") {
+      return res.status(403).json({
+        success: false,
+        message: "Developers can only update task status",
       });
     }
 
@@ -304,6 +325,9 @@ export async function assignTask(req, res) {
       orgId: req.orgId,
     });
 
+    publishNotification(userId, assignment.notification);
+    publishNotificationCount(userId, await prisma.notification.count({ where: { recipient_id: userId, read_at: null } }));
+
     return res.status(201).json({
       success: true,
       data: assignment,
@@ -335,6 +359,10 @@ export async function assignTask(req, res) {
         success: false,
         message: "User does not belong to your organization",
       });
+    }
+
+    if (error.code === "USER_NOT_DEVELOPER") {
+      return res.status(400).json({ success: false, message: "Tasks can only be assigned to developers" });
     }
 
     if (error.code === "ALREADY_ASSIGNED") {

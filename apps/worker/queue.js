@@ -8,3 +8,7 @@ const connection = {
 export const taskNotificationQueue = new Queue("task-notifications", {
   connection,
 });
+
+export const overdueTaskQueue = new Queue("overdue-tasks", {
+  connection,
+});

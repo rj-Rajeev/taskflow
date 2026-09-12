@@ -1,6 +1,13 @@
 import prisma from "../../lib/prisma.js";
 import { taskNotificationQueue } from "../../../../worker/queue.js";
 
+const statusLabels = {
+  todo: "To Do",
+  in_progress: "In Progress",
+  review: "In Review",
+  done: "Done",
+};
+
 export async function getTasksService({
   orgId,
   status,
@@ -10,11 +17,17 @@ export async function getTasksService({
   dueTo,
   page,
   limit,
+  userId,
+  userRole,
 }) {
   const where = {
     project: {
       org_id: orgId,
+      ...(userRole === "PROJECT_MANAGER" && { created_by: userId }),
     },
+    ...(userRole === "DEVELOPER" && {
+      taskAssignments: { some: { user_id: userId } },
+    }),
   };
 
   if (status) {
@@ -77,7 +90,7 @@ export async function getTasksService({
   };
 }
 
-export async function getTaskService(taskId, orgId) {
+export async function getTaskService(taskId, orgId, userId, userRole) {
   const task = await prisma.task.findUnique({
     where: {
       id: taskId,
@@ -117,7 +130,9 @@ export async function getTaskService(taskId, orgId) {
     throw error;
   }
 
-  if (task.project.org_id !== orgId) {
+  if (task.project.org_id !== orgId ||
+      (userRole === "PROJECT_MANAGER" && task.project.created_by !== userId) ||
+      (userRole === "DEVELOPER" && !task.taskAssignments.some((assignment) => assignment.user_id === userId))) {
     const error = new Error("Forbidden");
     error.code = "TASK_FORBIDDEN";
     throw error;
@@ -134,6 +149,8 @@ export async function createTaskService({
   status,
   priority,
   orgId,
+  userId,
+  userRole,
 }) {
   const project = await prisma.project.findUnique({
     where: {
@@ -147,7 +164,7 @@ export async function createTaskService({
     throw error;
   }
 
-  if (project.org_id !== orgId) {
+  if (project.org_id !== orgId || (userRole === "PROJECT_MANAGER" && project.created_by !== userId)) {
     const error = new Error("Forbidden");
     error.code = "PROJECT_FORBIDDEN";
     throw error;
@@ -173,6 +190,8 @@ export async function updateTaskService({
   dueDate,
   status,
   priority,
+  userId,
+  userRole,
 }) {
   const task = await prisma.task.findUnique({
     where: {
@@ -182,8 +201,10 @@ export async function updateTaskService({
       project: {
         select: {
           org_id: true,
+          created_by: true,
         },
       },
+      taskAssignments: { select: { user_id: true } },
     },
   });
 
@@ -193,7 +214,9 @@ export async function updateTaskService({
     throw error;
   }
 
-  if (task.project.org_id !== orgId) {
+  if (task.project.org_id !== orgId ||
+      (userRole === "PROJECT_MANAGER" && task.project.created_by !== userId) ||
+      (userRole === "DEVELOPER" && !task.taskAssignments.some((assignment) => assignment.user_id === userId))) {
     const error = new Error("Forbidden");
     error.code = "TASK_FORBIDDEN";
     throw error;
@@ -210,6 +233,7 @@ export async function updateTaskService({
     "low",
     "medium",
     "high",
+    "critical",
     "urgent",
   ];
 
@@ -225,20 +249,61 @@ export async function updateTaskService({
     throw error;
   }
 
-  return await prisma.task.update({
-    where: {
-      id: taskId,
-    },
-    data: {
-      ...(title !== undefined && { title }),
-      ...(description !== undefined && { description }),
-      ...(dueDate !== undefined && {
-        due_date: dueDate ? new Date(dueDate) : null,
-      }),
-      ...(status !== undefined && { status }),
-      ...(priority !== undefined && { priority }),
-    },
+  if (userRole === "DEVELOPER" && (title !== undefined || description !== undefined || dueDate !== undefined || priority !== undefined)) {
+    const error = new Error("Developers can only update task status");
+    error.code = "DEVELOPER_STATUS_ONLY";
+    throw error;
+  }
+
+  const result = await prisma.$transaction(async (transaction) => {
+    const updatedTask = await transaction.task.update({
+      where: { id: taskId },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(dueDate !== undefined && { due_date: dueDate ? new Date(dueDate) : null }),
+        ...(status !== undefined && { status }),
+        ...(priority !== undefined && { priority }),
+      },
+    });
+
+    let activity;
+    let notification;
+    if (status !== undefined && status !== task.status) {
+      const actor = await transaction.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      });
+      const message = `${actor?.name || "A team member"} moved ${task.title} from ${statusLabels[task.status] || task.status} to ${statusLabels[status] || status}`;
+      activity = await transaction.activityLog.create({
+        data: {
+          project_id: task.project_id,
+          task_id: taskId,
+          actor_id: userId,
+          type: "TASK_STATUS_CHANGED",
+          from_status: task.status,
+          to_status: status,
+          message,
+        },
+        include: { actor: { select: { id: true, name: true } }, task: { select: { id: true, title: true } } },
+      });
+
+      if (status === "review" && task.project.created_by && task.project.created_by !== userId) {
+        notification = await transaction.notification.create({
+          data: {
+            recipient_id: task.project.created_by,
+            task_id: taskId,
+            type: "TASK_MOVED_TO_REVIEW",
+            message: `Task ${taskId} moved to In Review`,
+          },
+        });
+      }
+    }
+
+    return { task: updatedTask, activity, notification };
   });
+
+  return result;
 }
 
 export async function deleteTaskService(taskId, orgId) {
@@ -309,6 +374,7 @@ export async function assignTaskService({
       user_id: userId,
       org_id: orgId,
     },
+    include: { user: { select: { role: true } } },
   });
 
   if (!orgMember) {
@@ -316,6 +382,12 @@ export async function assignTaskService({
       "User does not belong to your organization"
     );
     error.code = "USER_FORBIDDEN";
+    throw error;
+  }
+
+  if (orgMember.user.role !== "DEVELOPER") {
+    const error = new Error("Tasks can only be assigned to developers");
+    error.code = "USER_NOT_DEVELOPER";
     throw error;
   }
 
@@ -340,6 +412,14 @@ export async function assignTaskService({
       user_id: userId,
     },
   });
+  const notification = await prisma.notification.create({
+    data: {
+      recipient_id: userId,
+      task_id: taskId,
+      type: "TASK_ASSIGNED",
+      message: `You were assigned to ${task.title}`,
+    },
+  });
   try {
     const job = await taskNotificationQueue.add(
       "task-assigned-email",
@@ -358,7 +438,7 @@ export async function assignTaskService({
       }
     );
 
-  return {assignment, jobId: job.id};
+  return { assignment, notification, jobId: job.id };
   } catch (error) {
     try {
       await prisma.taskAssignment.delete({

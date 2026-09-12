@@ -47,6 +47,7 @@ export async function loginUser(email, password) {
         id: true,
         name: true,
         password_hash: true,
+        role: true,
       },
     });
     if (!existingUser) {
@@ -80,7 +81,10 @@ export async function loginUser(email, password) {
       id: existingUser.id,
       name: existingUser.name,
       orgId: orgMember?.org_id ?? null,
-      role: orgMember?.role ?? null
+      role: orgMember?.role ?? null,
+      userRole: existingUser.role === "DEVELOPER" && orgMember?.role === "org_admin"
+        ? "ADMIN"
+        : existingUser.role,
     });
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -101,6 +105,9 @@ export async function loginUser(email, password) {
       user: {
         id: existingUser.id,
         name: existingUser.name,
+        userRole: existingUser.role === "DEVELOPER" && orgMember?.role === "org_admin"
+          ? "ADMIN"
+          : existingUser.role,
       },
     };
   } catch (error) {
@@ -120,6 +127,7 @@ export async function renewSession(refreshToken) {
       name: true,
       refresh_token: true,
       refresh_expires_at: true,
+      role: true,
     },
   });
 
@@ -154,6 +162,9 @@ export async function renewSession(refreshToken) {
     name: dbUser.name,
     orgId: orgMember?.org_id ?? null,
     role: orgMember?.role ?? null,
+    userRole: dbUser.role === "DEVELOPER" && orgMember?.role === "org_admin"
+      ? "ADMIN"
+      : dbUser.role,
   });
 
   return {

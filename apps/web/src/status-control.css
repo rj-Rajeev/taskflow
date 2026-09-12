@@ -1,0 +1,35 @@
+.status-control {
+  display: grid;
+  gap: 5px;
+  min-width: 150px;
+}
+
+.status-control span {
+  color: #6f7b73;
+  font: 500 10px 'DM Mono', monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.status-control select {
+  margin: 0;
+  padding: 9px 10px;
+  font-size: 12px;
+}
+
+.status-control small {
+  color: #537e99;
+  font-size: 9px;
+}
+
+@media (max-width: 520px) {
+  .task {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .status-control {
+    width: 100%;
+  }
+}

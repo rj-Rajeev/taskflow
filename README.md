@@ -1,5 +1,55 @@
 # TaskFlow API
 
+## Velozity Assessment Dashboard
+
+This repository now contains the full-stack assessment implementation:
+
+- React + TypeScript dashboard in `apps/web`
+- Express API with PostgreSQL and Prisma
+- API-enforced `ADMIN`, `PROJECT_MANAGER`, and `DEVELOPER` permissions
+- HttpOnly refresh-token cookie and short-lived JWT access token
+- Socket.io activity feed, project rooms, notification counts, and presence
+- BullMQ overdue-task scheduler backed by Redis
+- Database-backed activity logs and notifications
+
+### Assessment Setup
+
+```bash
+cp .env.example .env
+npm install
+docker compose up -d postgres redis
+npx prisma migrate deploy
+npx prisma generate
+npx prisma db seed
+npm run api
+```
+
+In another terminal:
+
+```bash
+npm run web
+npm run worker
+```
+
+Dashboard: `http://localhost:5173`  
+API: `http://localhost:3000`
+
+All seeded users use `Password@123`.
+
+### Architecture Decisions
+
+Socket.io is used instead of polling because authenticated project rooms, reconnect handling, presence, and per-user notification events are required. On reconnect, the client reads the latest 20 permitted activity records from PostgreSQL, so missed events are not dependent on in-memory state.
+
+BullMQ is used for overdue processing because Redis and a worker process are already part of the Docker deployment. The recurring worker marks incomplete past-due tasks and writes an activity record.
+
+Refresh tokens are stored in the database and transported only in an HttpOnly cookie. Access tokens remain short-lived and are sent in the Authorization header.
+
+Frequently queried columns are indexed for project ownership/client lookup, task status/priority/due date, overdue scans, activity timelines, and unread notification counts. See `prisma/schema.prisma` and the assignment migration for the complete relational model.
+
+### Assessment Limitations
+
+The included dashboard is intentionally compact. Production deployment still requires separate hosting for the API/worker, PostgreSQL, Redis, and the Vite frontend, plus HTTPS cookie configuration and a shared Socket.io adapter when running multiple API instances.
+
 TaskFlow is a multi-tenant project management backend built with Node.js and Express.
 
 ---

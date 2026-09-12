@@ -20,6 +20,7 @@ export const authMiddleware = (req, res, next) => {
     req.userId = payload.id;
     req.orgId = payload.orgId;
     req.role = payload.role;
+    req.userRole = payload.userRole || (payload.role === "org_admin" ? "ADMIN" : "DEVELOPER");
     
     next();
   } catch (error) {

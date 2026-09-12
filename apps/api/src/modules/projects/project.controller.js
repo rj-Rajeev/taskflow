@@ -9,7 +9,7 @@ import {
 
 export async function getProjects(req, res) {
   try {
-    const projects = await getProjectsService(req.orgId);
+    const projects = await getProjectsService({ orgId: req.orgId, userId: req.userId, userRole: req.userRole });
 
     return res.status(200).json({
       success: true,
@@ -47,6 +47,7 @@ export async function createProject(req, res) {
       name,
       description,
       orgId: req.orgId,
+      userId: req.userId,
     });
 
     return res.status(201).json({
@@ -72,7 +73,7 @@ export async function getProject(req, res) {
       });
     }
 
-    const project = await getProjectService(req.params.id, req.orgId);
+    const project = await getProjectService(req.params.id, req.orgId, req.userId, req.userRole);
 
     if (!project) {
       return res.status(404).json({
@@ -119,7 +120,7 @@ export async function updateProject(req, res) {
       });
     }
 
-    const project = await updateProjectService(req.params.id, req.orgId, {
+    const project = await updateProjectService(req.params.id, req.orgId, req.userId, req.userRole, {
       name,
       description,
     });
@@ -168,7 +169,7 @@ export async function deleteProject(req, res) {
       });
     }
 
-    await deleteProjectService(req.params.id, req.orgId);
+    await deleteProjectService(req.params.id, req.orgId, req.userId, req.userRole);
 
     return res.status(200).json({
       success: true,
@@ -210,6 +211,8 @@ export async function getProjectDashboard(req, res) {
     const dashboard = await getProjectDashboardService(
       req.params.id,
       req.orgId,
+      req.userId,
+      req.userRole,
     );
 
     return res.status(200).json({

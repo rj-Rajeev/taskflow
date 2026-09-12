@@ -1,9 +1,10 @@
 import prisma from "../../lib/prisma.js";
 
-export async function getProjectsService(orgId) {
+export async function getProjectsService({ orgId, userId, userRole }) {
   return await prisma.project.findMany({
     where: {
       org_id: orgId,
+      ...(userRole === "PROJECT_MANAGER" && { created_by: userId }),
     },
     orderBy: {
       created_at: "desc",
@@ -12,17 +13,18 @@ export async function getProjectsService(orgId) {
 }
 
 
-export async function createProjectService({ name, description, orgId }) {
+export async function createProjectService({ name, description, orgId, userId }) {
   return await prisma.project.create({
     data: {
       name,
       description,
       org_id: orgId,
+      created_by: userId,
     },
   });
 }
 
-export async function getProjectService(projectId, orgId) {
+export async function getProjectService(projectId, orgId, userId, userRole) {
   const project = await prisma.project.findUnique({
     where: {
       id: projectId,
@@ -33,7 +35,7 @@ export async function getProjectService(projectId, orgId) {
     return null;
   }
 
-  if (project.org_id !== orgId) {
+  if (project.org_id !== orgId || (userRole === "PROJECT_MANAGER" && project.created_by !== userId)) {
     const error = new Error("Project does not belong to your organization");
     error.code = "PROJECT_FORBIDDEN";
     throw error;
@@ -42,7 +44,7 @@ export async function getProjectService(projectId, orgId) {
   return project;
 }
 
-export async function updateProjectService(projectId, orgId, data) {
+export async function updateProjectService(projectId, orgId, userId, userRole, data) {
   const project = await prisma.project.findUnique({
     where: {
       id: projectId,
@@ -55,7 +57,7 @@ export async function updateProjectService(projectId, orgId, data) {
     throw error;
   }
 
-  if (project.org_id !== orgId) {
+  if (project.org_id !== orgId || (userRole === "PROJECT_MANAGER" && project.created_by !== userId)) {
     const error = new Error("Forbidden");
     error.code = "PROJECT_FORBIDDEN";
     throw error;
@@ -74,7 +76,7 @@ export async function updateProjectService(projectId, orgId, data) {
   });
 }
 
-export async function deleteProjectService(projectId, orgId) {
+export async function deleteProjectService(projectId, orgId, userId, userRole) {
   const project = await prisma.project.findUnique({
     where: {
       id: projectId,
@@ -87,7 +89,7 @@ export async function deleteProjectService(projectId, orgId) {
     throw error;
   }
 
-  if (project.org_id !== orgId) {
+  if (project.org_id !== orgId || (userRole === "PROJECT_MANAGER" && project.created_by !== userId)) {
     const error = new Error("Forbidden");
     error.code = "PROJECT_FORBIDDEN";
     throw error;
@@ -100,7 +102,7 @@ export async function deleteProjectService(projectId, orgId) {
   });
 }
 
-export async function getProjectDashboardService(projectId, orgId) {
+export async function getProjectDashboardService(projectId, orgId, userId, userRole) {
   const project = await prisma.project.findUnique({
     where: {
       id: projectId,
@@ -117,7 +119,7 @@ export async function getProjectDashboardService(projectId, orgId) {
     throw error;
   }
 
-  if (project.org_id !== orgId) {
+  if (project.org_id !== orgId || (userRole === "PROJECT_MANAGER" && project.created_by !== userId)) {
     const error = new Error("Forbidden");
     error.code = "PROJECT_FORBIDDEN";
     throw error;
